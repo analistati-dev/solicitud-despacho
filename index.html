@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title> 🚛 Despacho</title>
+    <style>
+      html,body{height:100%;}
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{ font-family: "Comic Sans MS", "Comic Sans", cursive;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;padding:0;display:flex;flex-direction:column}
+      .container{width:100%;max-width:none;margin:0 auto;padding:20px;display:flex;flex-direction:column;min-height:100vh}
+      header{background:linear-gradient(90deg,#05e479,#6610f2);color:#fff;padding:28px;border-radius:10px;margin-bottom:18px;text-align:center;box-shadow:0 8px 20px rgba(0,0,0,.18)}
+      .dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:16px}
+      .card{background:#fff;padding:16px;border-radius:10px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+      .card-label{font-size:11px;color:#666;text-transform:uppercase;margin-bottom:6px}
+      .card-value{font-size:22px;font-weight:700;color:#000000}
+      .controls{background:#fff;padding:14px;border-radius:10px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,.06)}
+      .controls .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px}
+      input,select{padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px}
+      .buttons{display:flex;gap:8px;flex-wrap:wrap}
+      .btn{padding:10px 14px;border-radius:6px;border:none;cursor:pointer;font-weight:600}
+      .btn.primary{background:#0a66ff;color:#fff}
+      .btn.success{background:#28a745;color:#fff}
+      .btn.warn{background:#ffc107;color:#111}
+      .error{display:none;background:#fdecea;color:#611;padding:10px;border-radius:6px;margin-bottom:10px}
+      
+      .table-wrap{
+        background:#fff;
+        border-radius:10px;
+        box-shadow:0 4px 12px rgba(0,0,0,.06);
+        margin-bottom:24px;flex:1;
+        font-family: "Comic Sans MS", "Comic Sans", cursive;
+        display:flex;
+        flex-direction:column;
+        overflow:auto;
+      }
+
+      .highlight{transition:background 0.6s ease; background:rgba(255,255,0,0.18)}
+      .new-row{opacity:0.98}
+      .table-header table{width:100%;border-collapse:collapse}
+      .table-body{flex:1;overflow:auto}
+      .table-body table{width:100%;border-collapse:collapse}
+      thead th{background:linear-gradient(90deg,#0a66ff,#6610f2);color:#fff;padding:12px;text-align:left;font-size:13px;position:sticky;top:0}
+      tbody td{padding:10px;border-bottom:1px solid #eee;font-size:13px}
+      .status-cargando{background:#ffc107;color:#000;padding:4px 10px;border-radius:999px;font-weight:700}
+      .status-despachado{background:#28a745;color:#fff;padding:4px 10px;border-radius:999px;font-weight:700}
+      .empty{padding:26px;text-align:center;color:#777}
+      @media(max-width:768px){.controls .row{grid-template-columns:1fr}.buttons{flex-direction:column}.btn{width:100%}}
+    table{ border-collapse:collapse; } thead th{ border:3px solid rgb(0, 0, 0); } tbody td{ border:3px solid #0b0a0a; }
+    /* ===== FIX TABLA EN CELULAR ===== */
+@media (max-width: 600px){
+
+  body,
+  .container{
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  .table-wrap{
+    flex: none !important;
+    max-height: none !important;
+    overflow-x: auto;
+    overflow-y: visible;
+    margin-bottom: 40px;
+  }
+
+  table{
+    min-width: 900px;
+  }
+}
+
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+       <h1 style="font-size:60px;">
+       📦 PANEL DE DESPACHO
+      </h1>
+          
+      </header>
+
+      <div class="dashboard">
+        <div class="card"><div class="card-label">📝 Total Registros</div><div id="registros" class="card-value">0</div></div>
+        <div class="card"><div class="card-label">📈 Filtrados</div><div id="filtrados" class="card-value">0</div></div>
+        <div class="card"><div class="card-label">✅ Estado</div><div id="estado" class="card-value">●</div></div>
+        <div class="card"><div class="card-label">🌐 Última actualización</div><div id="ultima" class="card-value">—</div></div>
+      </div>
+
+      <div class="controls">
+        <div id="errorMsg" class="error"></div>
+        <div class="row">
+          <input id="filterTransportadora" placeholder="Transportadora">
+          <input id="filterPlaca" placeholder="Placa">
+          <input id="filterConductor" placeholder="Conductor">
+          <input id="filterproducto" placeholder="Producto">
+          <input id="filterFecha" type="date">
+          
+        </div>
+        <div class="buttons">
+          <button id="btnFiltrar" class="btn primary">🔍 Aplicar filtros</button>
+          <button id="btnLimpiar" class="btn warn">🔄 Limpiar</button>
+          <button id="btnDescargarExcel" class="btn success">📊 Descargar Excel</button>
+          <button id="btnActualizar" class="btn primary">🔁 Sincronizar ahora</button>
+         
+          <label style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#222">
+            <input type="checkbox" id="forceProxy"> 
+          </label>
+        </div>
+      </div>
+
+      <div id="dashboardPanel" style="display:none;background:#ffffffb4;padding:16px;border-radius:10px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,.06)">
+
+
+  <div class="row" style="margin-bottom:12px">
+    <select id="dTransportadora"><option value="">Transportadora</option></select>
+    <select id="dConductor"><option value="">Conductor</option></select>
+    <select id="dProducto"><option value="">Producto</option></select>
+    <input type="date" id="dFecha">
+  </div>
+
+  <canvas id="chartTransportadora" height="120"></canvas>
+  <canvas id="chartConductor" height="120" style="margin-top:20px"></canvas>
+  <canvas id="chartProducto" height="120" style="margin-top:20px"></canvas>
+</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>🚛 Transportadora </th>
+              <th>🧑🏼‍✈️ Conductor</th>
+              <th>🪪 Cédula</th>
+              <th>⛔ Placa</th>
+              <th>📍 Destino</th>
+              <th>📦 Producto</th>
+              <th>📅 Fecha</th></tr>
+          </thead>
+          <tbody id="tablaBody"><tr><td colspan="7" class="empty">Cargando datos...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      const URL_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRsCZPGgUb1IczAzo0cqnbTJVqU9gYnWqM4VkIrXZNxVvluyPqM2aIKtNQZxliIgQBSa7mEpqBkYya8/pub?gid=690620509&single=true&output=csv';
+      let datosOriginales = [];
+
+      const tablaBody = document.getElementById('tablaBody');
+      const registrosEl = document.getElementById('registros');
+      const filtradosEl = document.getElementById('filtrados');
+      const ultimaEl = document.getElementById('ultima');
+      const estadoEl = document.getElementById('estado');
+      const errorMsg = document.getElementById('errorMsg');
+
+      const fTransport = document.getElementById('filterTransportadora');
+      const fPlaca = document.getElementById('filterPlaca');
+      const fConductor = document.getElementById('filterConductor');
+      const fproducto = document.getElementById('filterproducto');
+      const fFecha=document.getElementById('filterFecha');
+      
+
+      const btnFiltrar = document.getElementById('btnFiltrar');
+      const btnLimpiar = document.getElementById('btnLimpiar');
+    
+      const btnXLS = document.getElementById('btnDescargarExcel');
+      const btnActualizar = document.getElementById('btnActualizar');
+
+      function parseCSV(text){
+        const rows=[];
+        const re=/(?:\s*"((?:[^\"]|\"\")*)"\s*|([^,]+)|)(?:,|$)/g;
+        const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
+        if(!lines.length) return [];
+        const headers=[]; lines[0].replace(re,(m1,m2,m3)=>headers.push((m2||m3||'').trim().toLowerCase()));
+        for(let i=1;i<lines.length;i++){const values=[]; lines[i].replace(re,(m1,m2,m3)=>values.push((m2||m3||'').replace(/""/g,'"'))); const obj={}; for(let j=0;j<headers.length;j++) obj[headers[j]]=values[j]||''; rows.push(obj);} return rows;
+      }
+      function obtenerFechaISO(valor){
+  if(!valor) return null;
+
+  // quitar hora
+  valor = valor.trim().split(' ')[0];
+
+  // DD/MM/YYYY
+  if(valor.includes('/')){
+    const [d,m,y] = valor.split('/');
+    return new Date(y, m-1, d);
+  }
+
+  // YYYY-MM-DD
+  if(valor.match(/^\d{4}-\d{2}-\d{2}$/)){
+    const [y,m,d] = valor.split('-');
+    return new Date(y, m-1, d);
+  }
+
+  return null;
+}
+
+
+      function renderTabla(datos){ tablaBody.innerHTML=''; if(!datos.length){ tablaBody.innerHTML='<tr><td colspan="9" class="empty">No hay datos</td></tr>'; filtradosEl.textContent='0'; return;} datos.forEach(r=>{ const tr=document.createElement('tr'); const estado=(r.estado||'').toLowerCase(); const badge=estado==='cargando'?'<span class="status-cargando">Cargando</span>':(estado==='despachado'?'<span class="status-despachado">Despachado</span>':(r.estado||'')); tr.innerHTML=`<td>${r.transportadora||''}</td><td>${r.conductor||''}</td><td>${r.cedula||r['cédula']||''}</td><td>${r.placa||''}</td><td>${r.destino||''}</td><td>${r.producto||''}</td><td>${r.fecha||''}</td>`; tablaBody.appendChild(tr);} ); filtradosEl.textContent=datos.length; registrosEl.textContent=datosOriginales.length; }
+
+      function aplicarFiltros(){
+  const t = fTransport.value.trim().toLowerCase();
+  const p = fPlaca.value.trim().toLowerCase();
+  const c = fConductor.value.trim().toLowerCase();
+  const f = fproducto.value.trim().toLowerCase();
+  const fecha = fFecha.value;
+
+
+  const filtrados = datosOriginales.filter(r=>{
+    if(t && !(r.transportadora || '').toLowerCase().includes(t)) return false;
+    if(p && !(r.placa || '').toLowerCase().includes(p)) return false;
+    if(c && !(r.conductor || '').toLowerCase().includes(c)) return false;
+    if(f && !(r.producto || '').toLowerCase().includes(f)) return false;
+    if(fecha){
+  const fechaRegistro = obtenerFechaISO(r.fecha);
+  const [y, m, d] = fecha.split('-');
+  const fechaFiltro = new Date(y, m - 1, d);
+
+  if(!fechaRegistro) return false;
+
+  if(
+    fechaRegistro.getFullYear() !== fechaFiltro.getFullYear() ||
+    fechaRegistro.getMonth() !== fechaFiltro.getMonth() ||
+    fechaRegistro.getDate() !== fechaFiltro.getDate()
+  ){
+    return false;
+  }
+}
+
+    return true;
+  });
+
+  renderTabla(filtrados);
+}
+
+    
+
+      function descargarXLS(){ if(!datosOriginales.length){ alert('No hay datos para exportar'); return; } const headers=['Transportadora','Conductor','Cédula','Placa','Destino','Producto','Fecha','estado']; const rows=[headers.join('\t')]; datosOriginales.forEach(r=>rows.push([r.transportadora||'',r.conductor||'',r.cedula||r['cédula']||'',r.placa||'',r.destino||'',r.producto||'',r.fecha||'',r.estado||'',''].join('\t'))); const blob=new Blob([rows.join('\n')],{type:'application/vnd.ms-excel'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`despachos_${new Date().toISOString().slice(0,10)}.xls`; a.click(); URL.revokeObjectURL(a.href); }
+
+      const PROXY_TEMPLATES = [
+        'https://api.allorigins.win/raw?url={url}',
+        'https://thingproxy.freeboard.io/fetch/{url}',
+        'https://api.codetabs.com/v1/proxy?quest={url}'
+      ];
+      let lastCSVText = '';
+      const forceProxyEl = document.getElementById('forceProxy');
+
+      // Restore user preference
+      try{ const pref = localStorage.getItem('useProxy'); if(pref==='1') forceProxyEl.checked = true; }catch(e){}
+
+      forceProxyEl.addEventListener('change', ()=>{ try{ localStorage.setItem('useProxy', forceProxyEl.checked ? '1' : '0'); }catch(e){} });
+
+      function buildProxyUrls(){
+        return PROXY_TEMPLATES.map(t => t.replace('{url}', encodeURIComponent(URL_CSV)) + '&t=' + Date.now());
+      }
+
+     function appendRows(rows){
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+
+    tr.innerHTML = `
+      <td>${r.transportadora||''}</td>
+      <td>${r.conductor||''}</td>
+      <td>${r.cedula||r['cédula']||''}</td>
+      <td>${r.placa||''}</td>
+      <td>${r.destino||''}</td>
+      <td>${r.producto||''}</td>
+      <td>${r.fecha||''}</td>
+    `;
+
+    tr.classList.add('new-row');
+    tablaBody.appendChild(tr);
+
+    setTimeout(()=> tr.classList.add('highlight'), 50);
+    setTimeout(()=> tr.classList.remove('highlight'), 3500);
+  });
+
+  registrosEl.textContent = datosOriginales.length;
+  filtradosEl.textContent = datosOriginales.length;
+}
+
+function solicitarPermisoNotificaciones(){
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+}
+
+function notificarNuevoRegistro(registro){
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  new Notification("📦 Nuevo despacho registrado", {
+    body:
+      `🚛 ${registro.transportadora || ''}\n` +
+      `⛔ Placa: ${registro.placa || ''}\n` +
+      `📦 Producto: ${registro.producto || ''}`,
+    icon: "https://cdn-icons-png.flaticon.com/512/1995/1995574.png"
+  });
+}
+
+      async function cargarDatos(){
+        estadoEl.textContent = 'Actualizando…';
+        errorMsg.style.display = 'none';
+
+        const useProxy = forceProxyEl.checked;
+
+        async function tryFetch(url){
+          const t0 = performance.now();
+          const res = await fetch(url, { cache: 'no-store' });
+          const t1 = performance.now();
+          const took = Math.round(t1 - t0);
+          if(!res.ok) throw new Error('HTTP ' + res.status + ' (took ' + took + 'ms)');
+          const text = await res.text();
+          return { text, took };
+        }
+
+        // Build attempt list (direct + multiple proxies)
+        const attempts = [];
+        if(!useProxy){ attempts.push(URL_CSV + '&t=' + Date.now()); }
+        attempts.push(...buildProxyUrls());
+
+        let finalText = null; let lastErr = null; let tookMs = null; let tried = [];
+        for(const url of attempts){
+          tried.push(url);
+          try{
+            const { text, took } = await tryFetch(url);
+            finalText = text;
+            tookMs = took;
+            break;
+          }catch(e){ lastErr = e; console.warn('fetch attempt failed', e); }
+        }
+
+        if(finalText === null){
+          estadoEl.textContent = '⚠ Error';
+          errorMsg.innerHTML = 'Error: ' + (lastErr && lastErr.message ? lastErr.message : lastErr) + ' — Comprueba que la hoja esté publicada.' +
+            '<br><small>Intentos: ' + tried.map(u=>u.split('?')[0]).join(', ') + '</small>';
+          errorMsg.style.display = 'block';
+          return;
+        }
+
+        // If data unchanged, just update timestamp and status
+        if(lastCSVText === finalText){
+          ultimaEl.textContent = new Date().toLocaleTimeString();
+          estadoEl.textContent = '✓ OK';
+          return;
+        }
+
+        // New or first-time data
+        if(!lastCSVText){
+          // full parse and render
+          datosOriginales = parseCSV(finalText);
+          renderTabla(datosOriginales);
+        } else {
+          // incremental: compute new lines and append
+          const newLines = finalText.trim().split('\n');
+          const oldLines = lastCSVText.trim().split('\n');
+          if(newLines.length > oldLines.length){
+            const headers = newLines[0];
+            const added = newLines.slice(oldLines.length).join('\n');
+            const partialCSV = headers + '\n' + added;
+            const nuevas = parseCSV(partialCSV);
+            // append to datosOriginales and table
+            nuevas.forEach(r => {
+  datosOriginales.push(r);
+  notificarNuevoRegistro(r); // 🔔 NOTIFICACIÓN
+});
+appendRows(nuevas);
+
+          } else {
+            // different but same number of lines (edited rows) — re-render full
+            datosOriginales = parseCSV(finalText);
+            renderTabla(datosOriginales);
+          }
+        }
+
+        lastCSVText = finalText;
+        ultimaEl.textContent = new Date().toLocaleTimeString();
+        estadoEl.textContent = '✓ OK';
+      }
+
+      btnFiltrar.addEventListener('click',aplicarFiltros);
+btnLimpiar.addEventListener('click',()=>{
+  fTransport.value='';
+  fPlaca.value='';
+  fConductor.value='';
+  fproducto.value='';
+  fFecha.value='';
+  renderTabla(datosOriginales);
+});
+     
+      btnXLS.addEventListener('click',descargarXLS);
+      btnActualizar.addEventListener('click',cargarDatos);
+
+      solicitarPermisoNotificaciones();
+cargarDatos();
+setInterval(cargarDatos,5000);
+
+    </script>
+  </body>
+</html>
