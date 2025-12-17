@@ -140,10 +140,12 @@
         </table>
       </div>
     </div>
-
+     
     <script>
       const URL_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRsCZPGgUb1IczAzo0cqnbTJVqU9gYnWqM4VkIrXZNxVvluyPqM2aIKtNQZxliIgQBSa7mEpqBkYya8/pub?gid=690620509&single=true&output=csv';
       let datosOriginales = [];
+      let registrosNotificados = new Set();
+
 
       const tablaBody = document.getElementById('tablaBody');
       const registrosEl = document.getElementById('registros');
@@ -277,6 +279,9 @@
   registrosEl.textContent = datosOriginales.length;
   filtradosEl.textContent = datosOriginales.length;
 }
+function generarIDRegistro(r){
+  return `${r.fecha}|${r.placa}|${r.transportadora}`.toLowerCase();
+}
 
 function solicitarPermisoNotificaciones(){
   if (!("Notification" in window)) return;
@@ -350,6 +355,10 @@ function notificarNuevoRegistro(registro){
         if(!lastCSVText){
           // full parse and render
           datosOriginales = parseCSV(finalText);
+           datosOriginales.forEach(r => {
+    const id = generarIDRegistro(r);
+    registrosNotificados.add(id); // marcar como ya vistos
+  });
           renderTabla(datosOriginales);
         } else {
           // incremental: compute new lines and append
@@ -361,11 +370,19 @@ function notificarNuevoRegistro(registro){
             const partialCSV = headers + '\n' + added;
             const nuevas = parseCSV(partialCSV);
             // append to datosOriginales and table
-            nuevas.forEach(r => {
+nuevas.forEach(r => {
+  const id = generarIDRegistro(r);
+
+  if (!registrosNotificados.has(id)) {
+    registrosNotificados.add(id);
+    notificarNuevoRegistro(r); // 🔔 solo una vez
+  }
+
   datosOriginales.push(r);
-  notificarNuevoRegistro(r); // 🔔 NOTIFICACIÓN
 });
+
 appendRows(nuevas);
+
 
           } else {
             // different but same number of lines (edited rows) — re-render full
