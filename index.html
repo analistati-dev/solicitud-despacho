@@ -272,7 +272,7 @@ function renderTabla(datos){
 
     
 
-      function descargarXLS(){ if(!datosOriginales.length){ alert('No hay datos para exportar'); return; } const headers=['Transportadora','Conductor','Cédula','Placa','Destino','Producto','Fecha','estado']; const rows=[headers.join('\t')]; datosOriginales.forEach(r=>rows.push([r.transportadora||'',r.conductor||'',r.cedula||r['cédula']||'',r.placa||'',r.destino||'',r.producto||'',r.fecha||'',r.estado||'',''].join('\t'))); const blob=new Blob([rows.join('\n')],{type:'application/vnd.ms-excel'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`despachos_${new Date().toISOString().slice(0,10)}.xls`; a.click(); URL.revokeObjectURL(a.href); }
+      function descargarXLS(){ if(!datosOriginales.length){ alert('No hay datos para exportar'); return; } const headers=['Transportadora','Conductor','Cédula','Placa','Destino','Producto','Fecha','estado']; const rows=[headers.join('\t')]; datosOriginales.forEach(r=>rows.push([r.transportadora||'',r.conductor||'',r.cedula||r['cédula']||'',r.placa||'',r.destino||'',r.producto||'',r.fecha||''].join('\t'))); const blob=new Blob([rows.join('\n')],{type:'application/vnd.ms-excel'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`despachos_${new Date().toISOString().slice(0,10)}.xls`; a.click(); URL.revokeObjectURL(a.href); }
 
       const PROXY_TEMPLATES = [
         'https://api.allorigins.win/raw?url={url}',
@@ -454,3 +454,4 @@ setInterval(cargarDatos,5000);
     </script>
   </body>
 </html>
+
