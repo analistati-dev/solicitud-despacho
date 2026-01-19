@@ -796,12 +796,36 @@ btnLimpiar.addEventListener('click',()=>{
 
         // Detectar tipo de archivo
         const esGoogleDrive = url.includes('drive.google.com') || url.includes('docs.google.com/open');
+        const esVideo = /\.(mp4|webm|avi|mov|mkv|flv|wmv)$/i.test(url.toLowerCase());
+        const esYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+        const esVimeo = url.includes('vimeo.com');
 
         // Si es Google Drive, extraer ID y generar URL de preview
         let urlFinal = url;
         if(esGoogleDrive && url.includes('id=')) {
           const id = url.split('id=')[1].split('&')[0];
           urlFinal = `https://drive.google.com/file/d/${id}/preview`;
+        }
+
+        // Si es YouTube, convertir a embed si es necesario
+        if(esYouTube) {
+          let videoId = '';
+          if(url.includes('youtu.be/')) {
+            videoId = url.split('youtu.be/')[1].split('?')[0];
+          } else if(url.includes('youtube.com/watch?v=')) {
+            videoId = url.split('v=')[1].split('&')[0];
+          }
+          if(videoId) {
+            urlFinal = `https://www.youtube.com/embed/${videoId}`;
+          }
+        }
+
+        // Si es Vimeo, convertir a embed si es necesario
+        if(esVimeo && !url.includes('/embed/')) {
+          const videoId = url.split('vimeo.com/')[1];
+          if(videoId) {
+            urlFinal = `https://player.vimeo.com/video/${videoId}`;
+          }
         }
 
         // Abrir en nueva pestaña
@@ -815,10 +839,3 @@ btnLimpiar.addEventListener('click',()=>{
     </script>
   </body>
 </html>
-
-  
-
- 
-   
-       
-         
