@@ -141,11 +141,16 @@ tbody td:first-child{
               <th>⛔ Placa</th>
               <th>📍 Destino</th>
               <th>📦 Producto</th>
-              <th>📅 Fecha Planificada de Cargue</th></tr>
+              <th>📅 Fecha Planificada de Cargue</th>
+              <th>📸 Evidencia Estado Carrocería</th>
+              <th>🗑️ Eliminar</th></tr>
           </thead>
-          <tbody id="tablaBody"><tr><td colspan="8" class="empty">Cargando datos...</td></tr></tbody>
+          <tbody id="tablaBody"><tr><td colspan="10" class="empty">Cargando datos...</td></tr></tbody>
         </table>
       </div>
+
+      <!-- Modal para ver evidencia - DESHABILITADO, se abre en nueva pestaña -->
+      <!-- Código anterior removido: se usa window.open() en su lugar -->
     </div>
      
     <script>
@@ -176,11 +181,95 @@ tbody td:first-child{
 
       function parseCSV(text){
         const rows=[];
-        const re=/(?:\s*"((?:[^\"]|\"\")*)"\s*|([^,]+)|)(?:,|$)/g;
-        const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim()!=='');
-        if(!lines.length) return [];
-        const headers=[]; lines[0].replace(re,(m1,m2,m3)=>headers.push((m2||m3||'').trim().toLowerCase()));
-        for(let i=1;i<lines.length;i++){const values=[]; lines[i].replace(re,(m1,m2,m3)=>values.push((m2||m3||'').replace(/""/g,'"'))); const obj={}; for(let j=0;j<headers.length;j++) obj[headers[j]]=values[j]||''; rows.push(obj);} return rows;
+        
+        // Primero, necesitamos identificar dónde termina el header
+        // El header puede estar en múltiples líneas si tiene comillas desequilibradas
+        let headerEndLine = 0;
+        let quoteCount = 0;
+        const lines = text.replace(/\r/g,'').split('\n');
+        
+        // Encontrar la línea donde el header termina (cuando las comillas se cierren)
+        for(let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          for(let j = 0; j < line.length; j++) {
+            if(line[j] === '"') quoteCount++;
+          }
+          // Si el número de comillas es par, el header terminó
+          if(quoteCount % 2 === 0 && quoteCount > 0) {
+            headerEndLine = i;
+            break;
+          }
+        }
+        
+        // Reconstruir el header juntando todas las líneas del encabezado
+        let headerLine = '';
+        for(let i = 0; i <= headerEndLine; i++) {
+          headerLine += lines[i] + ' ';
+        }
+        headerLine = headerLine.trim();
+        
+        console.log('Header completo:', headerLine);
+        
+        // Parser más robusto para CSV con comillas
+        function parseCSVLine(line) {
+          const values = [];
+          let current = '';
+          let inQuotes = false;
+          
+          for(let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+            
+            if(char === '"') {
+              if(inQuotes && nextChar === '"') {
+                current += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if(char === ',' && !inQuotes) {
+              values.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          values.push(current.trim());
+          return values;
+        }
+        
+        // Procesar headers
+        const headers=[]; 
+        const headerValues = parseCSVLine(headerLine);
+        headerValues.forEach(h => {
+          let clean = h.toLowerCase();
+          // Limpiar caracteres escapados y comillas mal formateadas
+          clean = clean.replace(/^\\"|"$/g, '').replace(/\\"/g, '"').replace(/^\"|\"$/g, '').trim();
+          // Eliminar caracteres especiales como emojis y caracteres de control, pero mantener espacios
+          clean = clean.replace(/[^\w\s\áéíóúñ\-]/g, '').trim();
+          headers.push(clean);
+        });
+        
+        console.log('Headers procesados:', headers);
+        console.log('Total headers:', headers.length);
+        
+        // Procesar datos (empezar después del header)
+        for(let i = headerEndLine + 1; i < lines.length; i++){
+          const line = lines[i].trim();
+          if(!line) continue;
+          
+          const values = parseCSVLine(line);
+          const obj={}; 
+          for(let j=0;j<headers.length;j++) {
+            obj[headers[j]] = values[j] || '';
+          }
+          
+          // Validación: si la primera columna está vacía, probablemente es una fila incompleta
+          if(headers[0] && obj[headers[0]]) {
+            rows.push(obj);
+          }
+        } 
+        return rows;
       }
       function obtenerFechaISO(valor){
   if(!valor) return null;
@@ -209,26 +298,129 @@ function renderTabla(datos){
 
   if(!datos.length){
     tablaBody.innerHTML =
-      '<tr><td colspan="8" class="empty">No hay datos</td></tr>';
+      '<tr><td colspan="10" class="empty">No hay datos</td></tr>';
     filtradosEl.textContent = '0';
     return;
   }
 
-  datos.forEach((r, index) => {
+  // Invertir orden (más reciente primero) - SIEMPRE
+  const datosInvertidos = Array.from(datos).reverse();
+  console.log('Total registros:', datos.length, 'Primer registro después de invertir:', datosInvertidos[0]);
+
+  datosInvertidos.forEach((r, displayIndex) => {
     const tr = document.createElement('tr');
+    const originalIndex = datos.length - 1 - displayIndex;
+    const numeroFila = datos.length - displayIndex; // Número invertido
+    tr.setAttribute('data-index', originalIndex);
+    
+    // Normalizar campos - buscar en múltiples variantes y limpiar datos
+    let transportadora = (r.transportadora || r['Transportadora'] || r['transportadora'] || '').trim();
+    let conductor = (r.conductor || r['Conductor'] || r['conductor'] || '').trim();
+    let cedula = (r.cedula || r['Cédula'] || r['cédula'] || r['cedula'] || '').trim();
+    let placa = (r.placa || r['Placa'] || r['placa'] || '').trim();
+    let destino = (r.destino || r['Destino'] || r['destino'] || '').trim();
+    
+    // Buscar producto - puede estar bajo varios nombres
+    let producto = '';
+    for(let key in r) {
+      if(key.includes('producto')) {
+        producto = r[key].trim();
+        break;
+      }
+    }
+    
+    // Buscar fecha
+    let fecha = '';
+    for(let key in r) {
+      if(key.includes('fecha')) {
+        fecha = r[key].trim();
+        break;
+      }
+    }
+    
+    // Buscar evidencia
+    let evidencia = '';
+    for(let key in r) {
+      if(key.includes('evidencia')) {
+        evidencia = r[key].trim();
+        break;
+      }
+    }
+    
+    // VALIDACIÓN: Si la cédula está vacía pero el conductor o transportadora contiene dígitos (patrón de cédula)
+    // y no tiene caracteres de nombre, es probable que esté desplazada
+    if(!cedula) {
+      // Buscar en transportadora si parece cédula (números, guiones, etc)
+      if(transportadora && /^\d{4,}/.test(transportadora.replace(/[-\s]/g, ''))) {
+        const partes = transportadora.split(/\s+/);
+        const potencialCedula = partes[0];
+        if(/^\d{4,}[a-zA-Z]?$/.test(potencialCedula.replace(/[-\s]/g, ''))) {
+          cedula = potencialCedula;
+          transportadora = partes.slice(1).join(' ');
+        }
+      }
+      // Buscar en conductor si parece cédula
+      if(!cedula && conductor && /^\d{4,}/.test(conductor.replace(/[-\s]/g, ''))) {
+        const partes = conductor.split(/\s+/);
+        const potencialCedula = partes[0];
+        if(/^\d{4,}[a-zA-Z]?$/.test(potencialCedula.replace(/[-\s]/g, ''))) {
+          cedula = potencialCedula;
+          conductor = partes.slice(1).join(' ');
+        }
+      }
+    }
+    
+    // Convertir a mayúsculas
+    transportadora = transportadora.toUpperCase();
+    conductor = conductor.toUpperCase();
+    cedula = cedula.toUpperCase();
+    placa = placa.toUpperCase();
+    destino = destino.toUpperCase();
+    producto = producto.toUpperCase();
+    fecha = fecha.toUpperCase();
+
+    // Crear botón para evidencia
+    let btnEvidencia = '';
+    if(evidencia && (evidencia.includes('google.com') || evidencia.includes('drive.google.com') || evidencia.includes('http'))) {
+      btnEvidencia = `<button class="btn-ver-evidencia" data-url="${evidencia}" style="background:#4CAF50;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;">👁️ Ver</button>`;
+    } else {
+      btnEvidencia = '<span style="color:#999;font-size:12px;">Sin archivo</span>';
+    }
+
+    // Botón para eliminar
+    let btnEliminar = `<button class="btn-eliminar-registro" data-index="${originalIndex}" style="background:#d32f2f;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;">🗑️ Eliminar</button>`;
 
     tr.innerHTML = `
-      <td>${index + 1}</td>
-      <td>${r.transportadora || ''}</td>
-      <td>${r.conductor || ''}</td>
-      <td>${r.cedula || r['cédula'] || ''}</td>
-      <td>${r.placa || ''}</td>
-      <td>${r.destino || ''}</td>
-      <td>${r.producto || ''}</td>
-      <td>${r.fecha || ''}</td>
+      <td>${numeroFila}</td>
+      <td>${transportadora}</td>
+      <td>${conductor}</td>
+      <td>${cedula}</td>
+      <td>${placa}</td>
+      <td>${destino}</td>
+      <td>${producto}</td>
+      <td>${fecha}</td>
+      <td>${btnEvidencia}</td>
+      <td>${btnEliminar}</td>
     `;
 
     tablaBody.appendChild(tr);
+  });
+
+  // Agregar listeners a botones de evidencia
+  document.querySelectorAll('.btn-ver-evidencia').forEach(btn => {
+    btn.addEventListener('click', function() {
+      abrirEvidencia(this.getAttribute('data-url'));
+    });
+  });
+
+  // Agregar listeners a botones de eliminar
+  document.querySelectorAll('.btn-eliminar-registro').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      if(confirm('¿Estás seguro de que deseas eliminar este registro?')) {
+        eliminarRegistro(index);
+      }
+    });
   });
 
   filtradosEl.textContent = datos.length;
@@ -242,27 +434,50 @@ function renderTabla(datos){
   const f = fproducto.value.trim().toLowerCase();
   const fecha = fFecha.value;
 
-
   const filtrados = datosOriginales.filter(r=>{
-    if(t && !(r.transportadora || '').toLowerCase().includes(t)) return false;
-    if(p && !(r.placa || '').toLowerCase().includes(p)) return false;
-    if(c && !(r.conductor || '').toLowerCase().includes(c)) return false;
-    if(f && !(r.producto || '').toLowerCase().includes(f)) return false;
+    // Normalizar valores y comparar
+    const transportadora = (r.transportadora || r['Transportadora'] || '').toLowerCase();
+    const placa = (r.placa || r['Placa'] || '').toLowerCase();
+    const conductor = (r.conductor || r['Conductor'] || '').toLowerCase();
+    
+    // Buscar producto
+    let producto = '';
+    for(let key in r) {
+      if(key.includes('producto')) {
+        producto = r[key].toLowerCase();
+        break;
+      }
+    }
+    
+    // Buscar fecha en todas las variantes
+    let fechaRegistro = '';
+    for(let key in r) {
+      if(key.includes('fecha')) {
+        fechaRegistro = r[key];
+        break;
+      }
+    }
+
+    if(t && !transportadora.includes(t)) return false;
+    if(p && !placa.includes(p)) return false;
+    if(c && !conductor.includes(c)) return false;
+    if(f && !producto.includes(f)) return false;
+    
     if(fecha){
-  const fechaRegistro = obtenerFechaISO(r.fecha);
-  const [y, m, d] = fecha.split('-');
-  const fechaFiltro = new Date(y, m - 1, d);
+      const fechaObj = obtenerFechaISO(fechaRegistro);
+      const [y, m, d] = fecha.split('-');
+      const fechaFiltro = new Date(y, m - 1, d);
 
-  if(!fechaRegistro) return false;
+      if(!fechaObj) return false;
 
-  if(
-    fechaRegistro.getFullYear() !== fechaFiltro.getFullYear() ||
-    fechaRegistro.getMonth() !== fechaFiltro.getMonth() ||
-    fechaRegistro.getDate() !== fechaFiltro.getDate()
-  ){
-    return false;
-  }
-}
+      if(
+        fechaObj.getFullYear() !== fechaFiltro.getFullYear() ||
+        fechaObj.getMonth() !== fechaFiltro.getMonth() ||
+        fechaObj.getDate() !== fechaFiltro.getDate()
+      ){
+        return false;
+      }
+    }
 
     return true;
   });
@@ -272,7 +487,7 @@ function renderTabla(datos){
 
     
 
-      function descargarXLS(){ if(!datosOriginales.length){ alert('No hay datos para exportar'); return; } const headers=['Transportadora','Conductor','Cédula','Placa','Destino','Producto','Fecha','estado']; const rows=[headers.join('\t')]; datosOriginales.forEach(r=>rows.push([r.transportadora||'',r.conductor||'',r.cedula||r['cédula']||'',r.placa||'',r.destino||'',r.producto||'',r.fecha||''].join('\t'))); const blob=new Blob([rows.join('\n')],{type:'application/vnd.ms-excel'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`despachos_${new Date().toISOString().slice(0,10)}.xls`; a.click(); URL.revokeObjectURL(a.href); }
+      function descargarXLS(){ if(!datosOriginales.length){ alert('No hay datos para exportar'); return; } const headers=['Transportadora','Conductor','Cédula','Placa','Destino','Producto','Fecha','Evidencia',]; const rows=[headers.join('\t')]; datosOriginales.forEach(r=>{ let transportadora = (r.transportadora || r['Transportadora'] || '').toUpperCase(); let conductor = (r.conductor || r['Conductor'] || '').toUpperCase(); let cedula = (r.cedula || r['Cédula'] || r['cédula'] || '').toUpperCase(); let placa = (r.placa || r['Placa'] || '').toUpperCase(); let destino = (r.destino || r['Destino'] || '').toUpperCase(); let producto = (r.producto || r['Producto'] || r['\"producto'] || '').toUpperCase(); let fecha = (r['\"Fecha planificada'] || r['\"fecha planificada'] || r['Fecha planificada'] || r['fecha planificada de cargue'] || r.fecha || r['Fecha Planificada de Cargue'] || r['Fecha'] || r[''] || '').toUpperCase(); let evidencia = r['evidencia estado carrocería'] || r['Evidencia estado carrocería'] || r['evidencia'] || ''; if(transportadora.includes('FECHA PLANIFICADA') && !fecha) { fecha = transportadora; transportadora = ''; } rows.push([transportadora,conductor,cedula,placa,destino,producto,fecha,evidencia].join('\t')); }); const blob=new Blob([rows.join('\n')],{type:'application/vnd.ms-excel'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`despachos_${new Date().toISOString().slice(0,10)}.xls`; a.click(); URL.revokeObjectURL(a.href); }
 
       const PROXY_TEMPLATES = [
         'https://api.allorigins.win/raw?url={url}',
@@ -294,16 +509,92 @@ function renderTabla(datos){
  function appendRows(rows){
   rows.forEach((r, i) => {
     const tr = document.createElement('tr');
+    
+    // Normalizar campos
+    let transportadora = (r.transportadora || r['Transportadora'] || '').trim();
+    let conductor = (r.conductor || r['Conductor'] || '').trim();
+    let cedula = (r.cedula || r['Cédula'] || r['cédula'] || '').trim();
+    let placa = (r.placa || r['Placa'] || '').trim();
+    let destino = (r.destino || r['Destino'] || '').trim();
+    
+    // Buscar producto
+    let producto = '';
+    for(let key in r) {
+      if(key.includes('producto')) {
+        producto = r[key].trim();
+        break;
+      }
+    }
+    
+    // Buscar fecha
+    let fecha = '';
+    for(let key in r) {
+      if(key.includes('fecha')) {
+        fecha = r[key].trim();
+        break;
+      }
+    }
+    
+    // Buscar evidencia
+    let evidencia = '';
+    for(let key in r) {
+      if(key.includes('evidencia')) {
+        evidencia = r[key].trim();
+        break;
+      }
+    }
+    
+    // VALIDACIÓN: Si la cédula está vacía pero el conductor o transportadora contiene dígitos
+    if(!cedula) {
+      if(transportadora && /^\d{4,}/.test(transportadora.replace(/[-\s]/g, ''))) {
+        const partes = transportadora.split(/\s+/);
+        const potencialCedula = partes[0];
+        if(/^\d{4,}[a-zA-Z]?$/.test(potencialCedula.replace(/[-\s]/g, ''))) {
+          cedula = potencialCedula;
+          transportadora = partes.slice(1).join(' ');
+        }
+      }
+      if(!cedula && conductor && /^\d{4,}/.test(conductor.replace(/[-\s]/g, ''))) {
+        const partes = conductor.split(/\s+/);
+        const potencialCedula = partes[0];
+        if(/^\d{4,}[a-zA-Z]?$/.test(potencialCedula.replace(/[-\s]/g, ''))) {
+          cedula = potencialCedula;
+          conductor = partes.slice(1).join(' ');
+        }
+      }
+    }
+    
+    // Convertir a mayúsculas
+    transportadora = transportadora.toUpperCase();
+    conductor = conductor.toUpperCase();
+    cedula = cedula.toUpperCase();
+    placa = placa.toUpperCase();
+    destino = destino.toUpperCase();
+    producto = producto.toUpperCase();
+    fecha = fecha.toUpperCase();
+
+    // Crear botón para evidencia
+    let btnEvidencia = '';
+    if(evidencia && (evidencia.includes('google.com') || evidencia.includes('drive.google.com') || evidencia.includes('http'))) {
+      btnEvidencia = `<button class="btn-ver-evidencia" data-url="${evidencia}" style="background:#4CAF50;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;">👁️ Ver</button>`;
+    } else {
+      btnEvidencia = '<span style="color:#999;font-size:12px;">Sin archivo</span>';
+    }
+
+    // Botón para eliminar
+    let btnEliminar = `<button class="btn-eliminar-registro" data-index="${datosOriginales.length - 1}" style="background:#d32f2f;color:#fff;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:bold;">🗑️ Eliminar</button>`;
 
     tr.innerHTML = `
-      <td>${tablaBody.children.length + 1}</td>
-      <td>${r.transportadora || ''}</td>
-      <td>${r.conductor || ''}</td>
-      <td>${r.cedula || r['cédula'] || ''}</td>
-      <td>${r.placa || ''}</td>
-      <td>${r.destino || ''}</td>
-      <td>${r.producto || ''}</td>
-      <td>${r.fecha || ''}</td>
+      <td>${datosOriginales.length}</td>
+      <td>${transportadora}</td>
+      <td>${conductor}</td>
+      <td>${cedula}</td>
+      <td>${placa}</td>
+      <td>${destino}</td>
+      <td>${producto}</td>
+      <td>${fecha}</td>
+      <td>${btnEvidencia}</td>
+      <td>${btnEliminar}</td>
     `;
 
     tr.classList.add('new-row');
@@ -311,6 +602,23 @@ function renderTabla(datos){
 
     setTimeout(() => tr.classList.add('highlight'), 50);
     setTimeout(() => tr.classList.remove('highlight'), 3500);
+  });
+
+  // Agregar listeners a botones de evidencia
+  document.querySelectorAll('.btn-ver-evidencia').forEach(btn => {
+    btn.addEventListener('click', function() {
+      abrirEvidencia(this.getAttribute('data-url'));
+    });
+  });
+
+  // Agregar listeners a botones de eliminar
+  document.querySelectorAll('.btn-eliminar-registro').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-index'));
+      if(confirm('¿Estás seguro de que deseas eliminar este registro?')) {
+        eliminarRegistro(index);
+      }
+    });
   });
 
   registrosEl.textContent = datosOriginales.length;
@@ -393,6 +701,28 @@ function notificarNuevoRegistro(registro){
         if(!lastCSVText){
           // full parse and render
           datosOriginales = parseCSV(finalText);
+          console.log('Campos recibidos:', Object.keys(datosOriginales[0] || {}));
+          console.log('Total campos:', Object.keys(datosOriginales[0] || {}).length);
+          console.log('Total registros:', datosOriginales.length);
+          
+          // Buscar y mostrar registro 218
+          if(datosOriginales.length >= 218) {
+            console.log('\n=== REGISTRO 218 COMPLETO ===');
+            const reg218 = datosOriginales[217]; // índice 217 = registro 218
+            console.log('Todas las claves y valores:');
+            for(let key in reg218) {
+              console.log(`  "${key}": "${reg218[key]}"`);
+            }
+          }
+          
+          console.log('\n=== BUSCANDO CAMPO DE EVIDENCIA EN TODOS LOS REGISTROS ===');
+          for(let i = 0; i < Math.min(10, datosOriginales.length); i++) {
+            const r = datosOriginales[i];
+            console.log(`\nRegistro ${i}:`);
+            for(let key in r) {
+              console.log(`  "${key}": "${r[key]}"`);
+            }
+          }
            datosOriginales.forEach(r => {
     const id = generarIDRegistro(r);
     registrosNotificados.add(id); // marcar como ya vistos
@@ -447,12 +777,48 @@ btnLimpiar.addEventListener('click',()=>{
       btnXLS.addEventListener('click',descargarXLS);
       btnActualizar.addEventListener('click',cargarDatos);
 
+      // Función para eliminar registros
+      function eliminarRegistro(index) {
+        if(index >= 0 && index < datosOriginales.length) {
+          datosOriginales.splice(index, 1);
+          renderTabla(datosOriginales);
+        }
+      }
+
+      // Función para abrir evidencia en nueva pestaña
+      function abrirEvidencia(url) {
+        if(!url || !url.trim()) {
+          alert('No hay archivo disponible');
+          return;
+        }
+
+        url = url.trim();
+
+        // Detectar tipo de archivo
+        const esGoogleDrive = url.includes('drive.google.com') || url.includes('docs.google.com/open');
+
+        // Si es Google Drive, extraer ID y generar URL de preview
+        let urlFinal = url;
+        if(esGoogleDrive && url.includes('id=')) {
+          const id = url.split('id=')[1].split('&')[0];
+          urlFinal = `https://drive.google.com/file/d/${id}/preview`;
+        }
+
+        // Abrir en nueva pestaña
+        window.open(urlFinal, '_blank', 'noopener,noreferrer');
+      }
+
       solicitarPermisoNotificaciones();
-cargarDatos();
-setInterval(cargarDatos,5000);
+      cargarDatos();
+      setInterval(cargarDatos, 5000);
 
     </script>
   </body>
 </html>
 
+  
 
+ 
+   
+       
+         
